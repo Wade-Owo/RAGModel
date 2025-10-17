@@ -33,7 +33,11 @@ def main():
 
     documents = load_documents()
     chunks = split_documents(documents)
-    print(chunks[0])
+    to_chroma(chunks)
+    if chroma_size_check():
+        print("Database Successfully populated")
+    else:
+        print("Unable to populate database, please try again")
 
 #loading the data from the 'data'
 def load_documents():
@@ -74,7 +78,7 @@ def to_chroma(chunks: list[Document]):
     new_chunks = []
     for chunk in chunks_with_ids:
         if chunk.metadata["id"] not in existing_ids:
-            chunks_with_ids.append(chunk)
+            new_chunks.append(chunk)
     
     if len(new_chunks):
         print(f"Adding {len(new_chunks)} new documents")
@@ -84,6 +88,16 @@ def to_chroma(chunks: list[Document]):
         db.persist()
     else:
         print("No new chunks to add")
+
+#write function to check that the db is populated, and call after to_chroma
+def chroma_size_check():
+    db = Chroma(
+        persist_directory=CHROMA_PATH, embedding_function=get_embedding_function()
+    )
+    db_count = db._collection.count()
+    if db_count > 0:
+        return True
+    return False
 
 def get_chunk_id(chunks):
     #create an ID based on the source, page number and chunk index

@@ -30,6 +30,7 @@ def query_rag(query_text: str):
 
     #searching for similarity in the db and getting top k results
     results = db.similarity_search_with_score(query_text, k=3)
+    print(results)
 
     context_info = "\n\n---\n\n".join([doc.page_content for doc, _score in results])
 
