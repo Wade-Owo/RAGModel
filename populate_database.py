@@ -9,7 +9,7 @@ from langchain.schema.document import Document
 #importing the embeddings function from the "get_embedding_function" file to use here
 from get_embedding_function import get_embedding_function
 #using chroma as our database to store the vectorized data
-from langchain.vectorstores.chroma import Chroma
+from langchain_community.vectorstores import Chroma
 
 
 '''
@@ -116,9 +116,9 @@ def get_chunk_id(chunks):
 
     return chunks #with updated metadata that includes the ids
 
-    def clear_database():
-        if os.path.exists(CHROMA_PATH):
-            shutil.rmtree(CHROMA_PATH)
+def clear_database():
+    if os.path.exists(CHROMA_PATH):
+        shutil.rmtree(CHROMA_PATH)
 
 if __name__ == '__main__':
     main()

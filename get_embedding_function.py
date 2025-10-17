@@ -1,4 +1,4 @@
-from langchain_community.embeddings.ollama import OllamaEmbeddings
+from langchain_ollama import OllamaEmbeddings
 
 #creating an embedding function to using for embedding our text
 
