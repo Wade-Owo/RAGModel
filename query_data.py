@@ -8,7 +8,7 @@ os.environ['USER_AGENT'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKi
 
 from langchain_chroma import Chroma
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_community.llms.ollama import Ollama
+from langchain_ollama import OllamaLLM
 from langchain_community.document_loaders import AsyncHtmlLoader
 from langchain_community.document_transformers import Html2TextTransformer
 from get_embedding_function import get_embedding_function
@@ -46,22 +46,32 @@ def main():
     print(f"Links: {links}")
     load_docs(links)
     
-    # documents = load_documents()
-    # chunks = split_documents(documents)
-    # to_chroma(chunks)
-    # if chroma_size_check():
-    #     print("Database Successfully populated")
-    # else:
-    #     print("Unable to populate database, please try again")
-    # query_rag(query_text)
+    documents = load_documents()
+    chunks = split_documents(documents)
+    
+    to_chroma(chunks)
+
+    if chroma_size_check():
+        print("Database Successfully populated")
+    else:
+        print("Unable to populate database, please try again")
+    query_rag(query_text)
 
 def search_query(query):
     # Construct the search URL (using Google search)
     link_array = []
 
+    blocked_domains = [
+        'youtube.com', 'youtu.be',  # Videos
+        'facebook.com', 'twitter.com', 'x.com', 'instagram.com',  # Social media
+        'tiktok.com', 'pinterest.com',  # More social
+        'reddit.com',  # Often not great for RAG
+    ]
+
     try:
         with DDGS() as ddgs:
-            results = ddgs.text(query, max_results=10) 
+            results = ddgs.text(query, max_results=10, backend="api")
+
             
             for result in results:
                 title = result.get('title', 'No title')
@@ -69,6 +79,16 @@ def search_query(query):
 
                 if '.pdf' in link.lower():
                     continue # for now don't do anything with pdfs
+     
+                # Skip blocked domains
+                if any(domain in link.lower() for domain in blocked_domains):
+                    print(f"Skipping blocked domain: {link}")
+                    continue
+                
+                # Skip image/video file extensions
+                bad_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.mp4', '.mov', '.avi']
+                if any(link.lower().endswith(ext) for ext in bad_extensions):
+                    continue
 
                 link_array.append(link)
                 print(f"Title: {title}")
@@ -80,6 +100,22 @@ def search_query(query):
         traceback.print_exc()
 
     return link_array
+
+def clean_text(text):
+    """Remove excessive whitespace and clean up text"""
+    import re
+    
+    # Remove excessive newlines (more than 2)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    
+    # Remove excessive spaces
+    text = re.sub(r' {2,}', ' ', text)
+    
+    # Remove leading/trailing whitespace from each line
+    lines = [line.strip() for line in text.split('\n')]
+    text = '\n'.join(lines)
+    
+    return text.strip()
 
 def load_docs(links):
     global doc_l
@@ -93,11 +129,15 @@ def load_docs(links):
             url = d.metadata.get("source", "unknown")
             clean_name = url.replace("https://", "").replace("http://", "").replace("/", "_")
             file = f"{DATA_PATH}/{clean_name}.txt"
+            
+            cleaned_content = clean_text(d.page_content)
 
             with open(file, "w", encoding="utf-8") as f:
-                f.write(d.page_content)
+                f.write(cleaned_content)
             
-            print(f"Saved: {file}")
+            # print(f"Saved: {file}")
+
+            d.page_content = cleaned_content
 
         doc_l.append(copy.deepcopy(documents_transformed))
     except Exception as e:
@@ -123,7 +163,7 @@ def query_rag(query_text: str):
 
     print(prompt)
 
-    model = Ollama(model="llama2")
+    model = OllamaLLM(model="llama2")
     response_text = model.invoke(prompt)
 
     #citing where the LLM got it's answers

@@ -61,9 +61,6 @@ def load_documents():
     document_loader = DirectoryLoader(DATA_PATH, glob="*.txt", show_progress=True)
     return document_loader.load()
 
-# documents = load_documents()
-# print(documents[1])
-
 #spliting the documents
 def split_documents(documents: list[Document]):
     text_splitter = RecursiveCharacterTextSplitter(
@@ -103,39 +100,24 @@ def to_chroma(chunks: list[Document]):
         new_chunks_ids = [chunk.metadata["id"] for chunk in new_chunks]
         #adding the new chunks and their IDs into the Chroma DB
         db.add_documents(new_chunks, ids=new_chunks_ids)
-        #force save the new additions
-        db.persist()
     else:
         print("No new chunks to add")
 
 def get_chunk_id(chunks):
-    #create an ID based on the source, page number and chunk index
-    last_page_id = None
-    cur_chunk_idx = 0
+    #create an ID based on the source and the coun
+    source_count_dict = {}
 
     for chunk in chunks:
-        source = chunk.metadata.get("source")
-        page = chunk.metadata.get("page")
-        cur_page_id = f"{source}:{page}"
-
-        '''
-        if the current page is the same as the last, then add to the chunk id because it's the same page
-
-        if it's a different page then start the chunk id at zero
-
-        This avoids the issue of duplication
-        '''
-        if cur_page_id == last_page_id:
-            cur_chunk_idx += 1
-        else:
-            cur_chunk_idx = 0
+        #chunks have source and content so I just need to count how many times that source comes up and use that count for the chunks with the same source
+        source = chunk.metadata.get("source", "unknown")
         
-        #calculating the chunk id
-        chunk_id = f"{cur_page_id}:{cur_chunk_idx}"
-        last_page_id = cur_page_id
+        if source not in source_count_dict:
+            source_count_dict[source] = 0
 
-        #adding chunk_id metadata
+        chunk_id = f"{source}:{source_count_dict[source]}"
         chunk.metadata["id"] = chunk_id
+
+        source_count_dict[source] += 1
 
     return chunks #with updated metadata that includes the ids
 
@@ -152,6 +134,14 @@ def chroma_size_check():
 def clear_database():
     if os.path.exists(CHROMA_PATH):
         shutil.rmtree(CHROMA_PATH)
+    if os.path.exists(DATA_PATH):
+        for file in os.listdir(DATA_PATH):
+            file_path = os.path.join(DATA_PATH, file)
+            if os.path.isfile(file_path):
+                try:
+                    os.remove(file_path)
+                except OSError as e:
+                    print(f"Error while deleting file: {e}")
 
 # if __name__ == '__main__':
 #     main()
