@@ -1,10 +1,25 @@
 import argparse
-from langchain_community.vectorstores import Chroma
-from langchain.prompts import ChatPromptTemplate
+import os
+import copy
+import hashlib
+
+os.environ['USER_AGENT'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+
+
+from langchain_chroma import Chroma
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.llms.ollama import Ollama
+from langchain_community.document_loaders import AsyncHtmlLoader
+from langchain_community.document_transformers import Html2TextTransformer
 from get_embedding_function import get_embedding_function
+from populate_database import load_documents, split_documents, to_chroma, chroma_size_check, clear_database
+#using duckduckgo search because google search wasn't working
+from ddgs import DDGS
+
+doc_l = []
 
 CHROMA_PATH = "chroma"
+DATA_PATH = './data/'
 
 PROMPT_TEMPLATE =  """
 Answer the question based only on the following context:
@@ -21,7 +36,76 @@ def main():
     parser.add_argument("query_text", type=str, help="The query text.")
     args = parser.parse_args()
     query_text = args.query_text
-    query_rag(query_text)
+
+    print("Clearing DB...")
+    clear_database()
+    print("DB Cleared!")
+
+    #performing the search
+    links = search_query(query_text)
+    print(f"Links: {links}")
+    load_docs(links)
+    
+    # documents = load_documents()
+    # chunks = split_documents(documents)
+    # to_chroma(chunks)
+    # if chroma_size_check():
+    #     print("Database Successfully populated")
+    # else:
+    #     print("Unable to populate database, please try again")
+    # query_rag(query_text)
+
+def search_query(query):
+    # Construct the search URL (using Google search)
+    link_array = []
+
+    try:
+        with DDGS() as ddgs:
+            results = ddgs.text(query, max_results=10) 
+            
+            for result in results:
+                title = result.get('title', 'No title')
+                link = result.get('href', '')
+
+                if '.pdf' in link.lower():
+                    continue # for now don't do anything with pdfs
+
+                link_array.append(link)
+                print(f"Title: {title}")
+                print(f"Link: {link}\n")
+    
+    except Exception as e:
+        print(f"Error while searching: {e}")
+        import traceback
+        traceback.print_exc()
+
+    return link_array
+
+def load_docs(links):
+    global doc_l
+    try:
+        loader = AsyncHtmlLoader(links)
+        docs = loader.load()
+        html2text = Html2TextTransformer()
+        documents_transformed = html2text.transform_documents(docs)
+        
+        for i, d in enumerate(documents_transformed):
+            url = d.metadata.get("source", "unknown")
+            clean_name = url.replace("https://", "").replace("http://", "").replace("/", "_")
+            file = f"{DATA_PATH}/{clean_name}.txt"
+
+            with open(file, "w", encoding="utf-8") as f:
+                f.write(d.page_content)
+            
+            print(f"Saved: {file}")
+
+        doc_l.append(copy.deepcopy(documents_transformed))
+    except Exception as e:
+        print(f"Error while loading {e}")
+        import traceback
+        traceback.print_exc()
+    
+    return docs
 
 def query_rag(query_text: str):
     #preparing the db

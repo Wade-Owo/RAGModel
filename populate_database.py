@@ -1,47 +1,64 @@
 import argparse
 import os
 import shutil
-#import for loading
-from langchain_community.document_loaders import PyPDFDirectoryLoader
+import hashlib
+#import for loading text
+from langchain_community.document_loaders import DirectoryLoader
 #import for spliting
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain.schema.document import Document
+from langchain_core.documents import Document
 #importing the embeddings function from the "get_embedding_function" file to use here
 from get_embedding_function import get_embedding_function
 #using chroma as our database to store the vectorized data
-from langchain_community.vectorstores import Chroma
-
+from langchain_chroma import Chroma
 
 '''
 Need to add the ability to edit an exisiting page
     if the pdf content in a chunk is modified, need to edit/update the chunk ID
     how do we know when we need to update this page?
 
-    Idea:
-    Keep track of original data and compare it
+    1. store hashed data content as metadata
+    2. select records with changed hashed metadata and update them using collections.update()
 '''
 
 DATA_PATH = './data/'
 CHROMA_PATH = 'chroma'
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--reset", action="store_true", help="Reset the database.")
-    args = parser.parse_args()
-    if args.reset:
-        clear_database()
+# def main(): 
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument("--reset", action="store_true", help="Reset the database.")
+#     args = parser.parse_args()
+#     if args.reset:
+#         clear_database()
 
-    documents = load_documents()
-    chunks = split_documents(documents)
-    to_chroma(chunks)
-    if chroma_size_check():
-        print("Database Successfully populated")
-    else:
-        print("Unable to populate database, please try again")
+#     documents = load_documents()
+#     chunks = split_documents(documents)
+#     to_chroma(chunks)
+#     if chroma_size_check():
+#         print("Database Successfully populated")
+#     else:
+#         print("Unable to populate database, please try again")
+
+
+# def main(): 
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument("--reset", action="store_true", help="Reset the database.")
+#     args = parser.parse_args()
+#     if args.reset:
+#         clear_database()
+
+#     documents = load_documents()
+#     chunks = split_documents(documents)
+#     to_chroma(chunks)
+#     if chroma_size_check():
+#         print("Database Successfully populated")
+#     else:
+#         print("Unable to populate database, please try again")
 
 #loading the data from the 'data'
 def load_documents():
-    document_loader = PyPDFDirectoryLoader(DATA_PATH)
+    #loads all the txt files in the 'data' directory
+    document_loader = DirectoryLoader(DATA_PATH, glob="*.txt", show_progress=True)
     return document_loader.load()
 
 # documents = load_documents()
@@ -82,22 +99,14 @@ def to_chroma(chunks: list[Document]):
     
     if len(new_chunks):
         print(f"Adding {len(new_chunks)} new documents")
+        #list of the new chunks' IDs
         new_chunks_ids = [chunk.metadata["id"] for chunk in new_chunks]
+        #adding the new chunks and their IDs into the Chroma DB
         db.add_documents(new_chunks, ids=new_chunks_ids)
         #force save the new additions
         db.persist()
     else:
         print("No new chunks to add")
-
-#write function to check that the db is populated, and call after to_chroma
-def chroma_size_check():
-    db = Chroma(
-        persist_directory=CHROMA_PATH, embedding_function=get_embedding_function()
-    )
-    db_count = db._collection.count()
-    if db_count > 0:
-        return True
-    return False
 
 def get_chunk_id(chunks):
     #create an ID based on the source, page number and chunk index
@@ -130,9 +139,19 @@ def get_chunk_id(chunks):
 
     return chunks #with updated metadata that includes the ids
 
+#write function to check that the db is populated, and call after to_chroma
+def chroma_size_check():
+    db = Chroma(
+        persist_directory=CHROMA_PATH, embedding_function=get_embedding_function()
+    )
+    db_count = db._collection.count()
+    if db_count > 0:
+        return True
+    return False
+
 def clear_database():
     if os.path.exists(CHROMA_PATH):
         shutil.rmtree(CHROMA_PATH)
 
-if __name__ == '__main__':
-    main()
+# if __name__ == '__main__':
+#     main()
