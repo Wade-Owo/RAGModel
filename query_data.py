@@ -31,6 +31,7 @@ Answer the question based only on the following context:
 Answer the question based on the above context: {question}
 """
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("query_text", type=str, help="The query text.")
@@ -40,6 +41,10 @@ def main():
     print("Clearing DB...")
     clear_database()
     print("DB Cleared!")
+
+    if not os.path.exists(DATA_PATH):
+        os.makedirs("data", exist_ok=True)
+        print(f"Path Exists: {os.path.exists(DATA_PATH)}")
 
     #performing the search
     links = search_query(query_text)
@@ -55,7 +60,30 @@ def main():
         print("Database Successfully populated")
     else:
         print("Unable to populate database, please try again")
-    query_rag(query_text)
+    
+    response = query_rag(query_text)
+
+    print(response)
+
+    lst_tests = ["flour", "sugar", "apples", "cinnamon", "butter"]
+
+    #testing RAG
+    print(f"Testing the RAG Response reliablilty: {tester(response, lst_tests)}")
+
+    print("Clearing DB...")
+    clear_database()
+    print("DB Cleared!")
+'''
+Takes a list(names of the steps) function-> sees whether provided names in the list are in the rag response. 
+If at least one name is not present, then return false, if all are present return true
+'''
+def tester(response, lst):
+    response_lower = response.lower()
+    for test in lst:
+        if test.lower() not in response_lower:
+            return False
+    return True
+
 
 def search_query(query):
     # Construct the search URL (using Google search)
@@ -119,33 +147,44 @@ def clean_text(text):
 
 def load_docs(links):
     global doc_l
-    try:
-        loader = AsyncHtmlLoader(links)
-        docs = loader.load()
-        html2text = Html2TextTransformer()
-        documents_transformed = html2text.transform_documents(docs)
+    successful_docs = []
+    for link in links:
+        try:
+            loader = AsyncHtmlLoader([link])
+            docs = loader.load()
+
+            if not docs:
+                #no content was loaded
+                continue
+
+            html2text = Html2TextTransformer()
+            documents_transformed = html2text.transform_documents(docs)
+            
+            for i, d in enumerate(documents_transformed):
+                url = d.metadata.get("source", "unknown")
+                clean_name = url.replace("https://", "").replace("http://", "").replace("/", "_")
+                file = f"{DATA_PATH}/{clean_name}.txt"
+                
+                cleaned_content = clean_text(d.page_content)
+
+                with open(file, "w", encoding="utf-8") as f:
+                    f.write(cleaned_content)
+                
+                # print(f"Saved: {file}")
+
+                d.page_content = cleaned_content
+                successful_docs.extend(documents_transformed)
         
-        for i, d in enumerate(documents_transformed):
-            url = d.metadata.get("source", "unknown")
-            clean_name = url.replace("https://", "").replace("http://", "").replace("/", "_")
-            file = f"{DATA_PATH}/{clean_name}.txt"
-            
-            cleaned_content = clean_text(d.page_content)
-
-            with open(file, "w", encoding="utf-8") as f:
-                f.write(cleaned_content)
-            
-            # print(f"Saved: {file}")
-
-            d.page_content = cleaned_content
-
-        doc_l.append(copy.deepcopy(documents_transformed))
-    except Exception as e:
-        print(f"Error while loading {e}")
-        import traceback
-        traceback.print_exc()
+        except Exception as e:
+            print(f"Error while loading {link}: {e}")
+            continue
     
-    return docs
+    if successful_docs:
+        doc_l.append(copy.deepcopy(successful_docs))
+    else:
+        print("No documents successfully loaded")
+    
+    return successful_docs
 
 def query_rag(query_text: str):
     #preparing the db
@@ -170,6 +209,7 @@ def query_rag(query_text: str):
 
     sources = [doc.metadata.get("id", None) for doc, _score in results]
     formatted_res = f"Response: {response_text}\n Sources: {sources}"
+    print(f"Response Type: {type(response_text)}")
 
     print(formatted_res)
     return response_text

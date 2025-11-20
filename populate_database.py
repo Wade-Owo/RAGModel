@@ -135,13 +135,15 @@ def clear_database():
     if os.path.exists(CHROMA_PATH):
         shutil.rmtree(CHROMA_PATH)
     if os.path.exists(DATA_PATH):
-        for file in os.listdir(DATA_PATH):
-            file_path = os.path.join(DATA_PATH, file)
-            if os.path.isfile(file_path):
-                try:
-                    os.remove(file_path)
-                except OSError as e:
-                    print(f"Error while deleting file: {e}")
+        shutil.rmtree(DATA_PATH)
+        
+        # for file in os.listdir(DATA_PATH):
+        #     file_path = os.path.join(DATA_PATH, file)
+        #     if os.path.isfile(file_path):
+        #         try:
+        #             os.remove(file_path)
+        #         except OSError as e:
+        #             print(f"Error while deleting file: {e}")
 
 # if __name__ == '__main__':
 #     main()
