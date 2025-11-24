@@ -22,13 +22,20 @@ CHROMA_PATH = "chroma"
 DATA_PATH = './data/'
 
 PROMPT_TEMPLATE =  """
-Answer the question based only on the following context:
+You are a workflow assitant. Based ONLY on the context provided below, create a numbered list of steps to accomplish the task.
 
+Context:
 {context}
 
----
+Task: {question}
 
-Answer the question based on the above context: {question}
+RULES:
+1. Output ONLY a numbered list of steps (1., 2., 3., etc.)
+2. Each step should be clear and actionable
+3. Do NOT include any introduction like "Here are the steps..." 
+4. Do NOT include any explanation or conclusion
+5. Do NOT add extra commentary
+6. If the context doesn't conain relevant information, output: "Insufficient information to create workflow"
 """
 
 
@@ -38,16 +45,14 @@ def main():
     args = parser.parse_args()
     query_text = args.query_text
 
-    print("Clearing DB...")
-    clear_database()
-    print("DB Cleared!")
 
     if not os.path.exists(DATA_PATH):
         os.makedirs("data", exist_ok=True)
         print(f"Path Exists: {os.path.exists(DATA_PATH)}")
 
     #performing the search
-    links = search_query(query_text)
+    print("Query: What will be the steps if we want to build the workflow from this query: "+ query_text)
+    links = search_query("What will be the steps if we want to build the workflow from this query: " + query_text)
     print(f"Links: {links}")
     load_docs(links)
     
@@ -61,14 +66,7 @@ def main():
     else:
         print("Unable to populate database, please try again")
     
-    response = query_rag(query_text)
-
-    print(response)
-
-    lst_tests = ["flour", "sugar", "apples", "cinnamon", "butter"]
-
-    #testing RAG
-    print(f"Testing the RAG Response reliablilty: {tester(response, lst_tests)}")
+    query_rag(query_text)
 
     print("Clearing DB...")
     clear_database()
@@ -192,7 +190,7 @@ def query_rag(query_text: str):
     db = Chroma(persist_directory=CHROMA_PATH, embedding_function=embedding_func)
 
     #searching for similarity in the db and getting top k results
-    results = db.similarity_search_with_score(query_text, k=3)
+    results = db.similarity_search_with_score(query_text, k=5) #Change the k to 5
     print(results)
 
     context_info = "\n\n---\n\n".join([doc.page_content for doc, _score in results])
@@ -208,8 +206,7 @@ def query_rag(query_text: str):
     #citing where the LLM got it's answers
 
     sources = [doc.metadata.get("id", None) for doc, _score in results]
-    formatted_res = f"Response: {response_text}\n Sources: {sources}"
-    print(f"Response Type: {type(response_text)}")
+    formatted_res = f"Response: \n{response_text}"
 
     print(formatted_res)
     return response_text
